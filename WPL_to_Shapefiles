@@ -1,0 +1,92 @@
+# Tool to convert .wpl file (from Mikrokopter MKTool) to .shp file for GIS use
+# Written by Emanuel Moss for Boston University's Central Lydia Archaeological Survey on 28 May 2013
+
+# Import necessary modules
+import arcpy
+import os
+
+# Define input parameters ("C:\\Users\\gygaia\\Desktop\\Dummy_WPL" "C:\Users\gygaia\Desktop\Dummy_Shapefile" "PE_GCS_WGS_1984")
+# Path for geodatabase
+wplPath = arcpy.GetParameterAsText(0)
+# Directory for WPL files
+outPath = arcpy.GetParameterAsText(1)
+# New feature class name
+coordinateSystem = arcpy.GetParameterAsText(2)
+
+# Set workspace
+arcpy.env.workspace = wplPath
+
+# Create list of WPL files in directory
+wplFiles = os.listdir(wplPath)
+
+# Define a function that creates a feature class for each waypoint file
+def createFeatureClass(file):
+    outName = file[:-4] + ".shp"
+    geometryType = "POINT"
+    has_m = "DISABLED"
+    has_z = "ENABLED"
+    arcpy.CreateFeatureclass_management(outPath, outName, geometryType, " ", has_m, has_z)
+    nameField = "NAME"
+    altField = "Altitude"
+    fileField = "FromFile"
+    arcpy.env.workspace = outPath
+    arcpy.AddField_management(outName, nameField, "TEXT", "", "", 12)
+    arcpy.AddField_management(outName, altField, "FLOAT", "", "")
+    arcpy.AddField_management(outName, fileField, "TEXT", "", "", 50)
+    # Define projection
+    arcpy.DefineProjection_management(wplFile, coordinateSystem)
+
+# Define a function to read lines from .wpl file and insert into a shapefile
+def wplConverter(file, shapefile):
+    # Read lines in the file and and append to coordinate list
+    coordList = []
+    wayPoints = open(file)
+    waypointList = wayPoints.readlines()
+    # Establish index for first point
+    pointIndex = waypointList.index("[Point1]\n")
+    latIndex = pointIndex + 1
+    lonIndex = latIndex + 1
+    altIndex = lonIndex + 2
+    # Establish last index
+    waypointListLength = len(waypointList)
+    # Create a list of each point and associated coordinates
+    while pointIndex < waypointListLength:
+        pointName = str(waypointList[pointIndex])
+        pointLatLine = waypointList[latIndex]
+        pointLat = float(pointLatLine[9:])
+        pointLonLine = waypointList[lonIndex]
+        pointLon = float(pointLonLine[10:])
+        pointAltLine = waypointList[altIndex]
+        pointAlt = float(pointAltLine[9:])
+        waypoint = (pointName, pointLat, pointLon, pointAlt)
+        coordList.append(waypoint)    
+        pointIndex = pointIndex + 13
+        latIndex = pointIndex + 1
+        lonIndex = latIndex + 1
+        altIndex = lonIndex + 2
+    # Create insert cursor and advance to next row
+    waypointRows = arcpy.InsertCursor(shapefile)
+    waypointRow = waypointRows.newRow()
+    for waypoint in coordList:
+        # Define attributes of new point
+        pointName = waypoint[0]
+        lat = waypoint[1]
+        lon = waypoint[2]
+        alt = waypoint[3]
+        # Define geometry of new point
+        newPoint = arcpy.Point(lon, lat, alt)
+        # Populate fields of new row
+        waypointRow.SHAPE = newPoint
+        waypointRow.setValue("NAME", pointName)
+        waypointRow.setValue("Altitude", alt)
+        waypointRow.setValue("FromFile", wplFile)
+        ##Insert the new row into the shapefile
+        waypointRows.insertRow(waypointRow)
+        waypointRow = waypointRows.newRow()
+    del waypointRows
+    del waypointRow
+    del coordList
+
+for wplFile in wplFiles:
+    wplFileFull = wplPath + "\\" + wplFile
+    wplConverter(wplFileFull, outName)
