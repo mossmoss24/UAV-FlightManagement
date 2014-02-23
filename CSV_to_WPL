@@ -1,0 +1,97 @@
+# Tool to convert .csv file to .wpl file for use in Mikrokopter's MKTool UAV flight planning software
+# Written by Emanuel Moss for Boston University's Central Lydia Archaeological Survey on May 30, 2013
+
+# This tool is designed to convert a series of points, exported from ArcGIS as a CSV, into a flight plan for a UAV.
+
+# Import module
+import os
+import arcpy
+
+# Get Parameters
+# For testing, used ("C:\\Users\\gygaia\\Desktop\\MapOutput\\Export_Output.csv" "C:\\Users\\gygaia\\Desktop\\MapOutput\\" "DummyWPL.wpl")
+csvFileLocation = arcpy.GetParameterAsText(0) # Location of CSV file, which should contain "Index" "Lon" "Lat" fields, or some approximation thereof
+wplFilePath = arcpy.GetParameterAsText(1) # Path for new WPL file
+wplFileName = arcpy.GetParameterAsText(2) # Desired name for new WPL file (cannot already be taken)
+
+# Create WPL file
+wplFile = wplFilePath + "\\" + wplFileName
+wplFile = open(wplFile, "w")
+
+# Open CSV file
+csvFile = open(csvFileLocation, "r")
+
+# Create list of headers from CSV file
+csvHeader = csvFile.readline()
+csvHeader = csvHeader[:-1]
+csvHeaderList = csvHeader.split(",")
+
+# Edit headers to comply with WPL standards
+# Waypoint event
+eventIndex = csvHeaderList.index("WP_Event_C")
+csvHeaderList.insert(eventIndex, "WP_Event_Channel_Value")
+csvHeaderList.pop(eventIndex + 1)
+# Camera Nick
+nickIndex = csvHeaderList.index("CAM_Nick")
+csvHeaderList.insert(nickIndex, "CAM-Nick")
+csvHeaderList.pop(nickIndex + 1)
+
+# Get number of points in CSV file
+csvLines = csvFile.readlines()
+csvLength = len(csvLines)
+# Subtract header from csvLength
+lineCount = csvLength
+
+# Abort script and generate error message if number of waypoints exceeds 32
+if lineCount > 32:
+    wplFile.close()
+    os.remove(wplFilePath + wplFileName)
+    arcpy.AddMessage("Too many waypoints! Maximum number of waypoints for CineStar6 is 32.")
+    arcpy.GetMessages()
+    arcpy.AddError("Too many waypoints! Maximum number of waypoints for CineStar6 is 32.")
+    sys.exit("Too many waypoints! Maximum number of waypoints for CineStar6 is 32.")
+
+# Write Initial line(s) to WPL file
+wplFile.write("[General]\n")
+wplFile.write("FileVersion=3\n")
+wplFile.write("NumberOfWaypoints=" + str(csvLength) + "\n")
+
+# Start count of waypoints in list
+csvLineIndex = 0
+
+# Run through each waypoint in list
+while lineCount > 0:
+    # Select first waypoint in list
+    csvLine = csvLines[csvLineIndex]
+    # Truncate "\n" characters from line
+    csvLine = csvLine[:-1]
+    # Split line at commas
+    csvLine = csvLine.split(",")
+    # Write ID number as Point number
+    firstLine = "[Point" + str(csvLine[0]) + "]"
+    wplFile.write(firstLine + "\n")
+    # Truncate ID field from subsequent steps
+    csvLineData = csvLine[1:]
+    csvLineHeadings = csvHeaderList[1:]
+    # Set subsequent operation to start at first waypoint
+    csvHeaderIndex = 0
+    # Run through each data point in waypoint
+    for datum in csvLineData:
+        # Match data point in waypoint to appropriate heading and write to WPL file
+        datumLabel = csvLineHeadings[csvHeaderIndex]
+        datumText = str(datumLabel) + "=" + str(datum)
+        wplFile.write(str(datumText) + "\n")
+        # Move on to next data point in waypoint
+        csvHeaderIndex = csvHeaderIndex +1
+    # Move to next waypoint in CSV
+    csvLineIndex = csvLineIndex + 1
+    lineCount = lineCount - 1
+
+# Close WPL
+wplFile.close()
+    
+    
+    
+    
+
+
+
